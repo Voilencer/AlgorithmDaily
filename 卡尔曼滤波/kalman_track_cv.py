@@ -2,7 +2,9 @@ import cv2, re
 import numpy as np
 import matplotlib.pyplot as plt
 
-"""
+
+
+""" 轨迹预测
 cv2.KalmanFilter(4, 2) 
     # 创建kalman滤波器 
     dynam_params：状态空间的维数； 4
@@ -20,6 +22,7 @@ kalman.errorCovPre 先验方差
 kalman.gain 卡尔曼增益矩阵
 """
 
+
 def read_data(path):
     info = {'frame':[], 'x':[], 'y':[]}
     with open(path, 'r') as fp:
@@ -31,7 +34,7 @@ def read_data(path):
     return info
 
 
-path = r'./data/data2.txt'
+path = r'./data/frame_x_y.txt'
 info = read_data(path)
 
 figure = plt.figure()
@@ -39,12 +42,12 @@ plt.rcParams['font.sans-serif'] = 'SimHei'
 plt.scatter(info['frame'], info['x'], color='r', label='x-观测值')
 plt.scatter(info['frame'], info['y'], color='b', label='y-观测值')
 
-
 # 状态量  x, y, Vx, Vy
+# 观测量  x y
 kalman = cv2.KalmanFilter(4, 2)
 kalman.measurementMatrix = np.array([[1, 0, 0, 0], [0, 1, 0, 0]], np.float32) # 设置测量矩阵 H
 kalman.processNoiseCov = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]], np.float32) # 设置过程噪声协方差矩阵 Q
-kalman.measurementNoiseCov = np.matrix([[1, 0], [0, 1]])    # 观测噪声方差
+kalman.measurementNoiseCov = np.array([[1, 0], [0, 1]], np.float32)    # 观测噪声方差
 
 num = len(info['frame'])
 for k in range(1, num):
@@ -53,7 +56,7 @@ for k in range(1, num):
 
     x, y = info['x'][k], info['y'][k]
     current_measurement = np.array([[np.float32(x)], [np.float32(y)]])
-    kalman.correct(current_measurement)  # 用当前测量来校正卡尔曼滤波器
+    kalman.correct(current_measurement)
     current_prediction = kalman.predict()
     plt.scatter(info['frame'][k], current_prediction[0][0], color='olive', label='x-预测值', marker='s')
     plt.scatter(info['frame'][k], current_prediction[1][0], color='pink', label='y-预测值', marker='*')

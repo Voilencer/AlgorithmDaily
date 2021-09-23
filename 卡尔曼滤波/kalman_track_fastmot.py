@@ -1,11 +1,10 @@
 from enum import Enum
 import numpy as np
-import numba as nb
+
 
 """
 fast mot 卡尔曼滤波
 """
-from .utils.rect import get_size
 
 
 class MeasType(Enum):
@@ -13,23 +12,21 @@ class MeasType(Enum):
     DETECTOR = 1
 
 
+def get_size(l,t,r,b):
+    return r-l, b-t
+
+
 class KalmanFilter:
     """
-    A simple Kalman filter for tracking bounding boxes in image space.
-    The 8-dimensional state space
-        x1, y1, x2, y2,  左上角， 右下角 l,t,r,b
-        v_x1, v_y1, v_x2, v_y2
-    contains the bounding box top left corner, bottom right corner,
-    and their respective velocities.
-    Object motion follows a modified constant velocity model.
-    Velocity will decay over time without measurement and bounding box
-    corners are coupled together to minimize drifting.
+    状态量：        x1, y1, x2, y2,  左上角， 右下角 l,t,r,b
+                   v_x1, v_y1, v_x2, v_y2
+    匀速模型
+    没有测量值速度会随时间减少，目的是为了减少漂移
     Parameters
     ----------
     config : Dict
         Kalman Filter parameters.
     """
-
     def __init__(self, config):
         self.std_factor_acc = config['std_factor_acc']
         self.std_offset_acc = config['std_offset_acc']
@@ -56,7 +53,7 @@ class KalmanFilter:
 
     def initiate(self, det_meas):
         """
-        Creates track from unassociated measurement.
+        从不关联的度量创建跟踪
         Parameters
         ----------
         det_meas : ndarray
@@ -69,7 +66,7 @@ class KalmanFilter:
         """
         mean_pos = det_meas
         mean_vel = np.zeros_like(mean_pos)
-        mean = np.r_[mean_pos, mean_vel]
+        mean = np.r_[mean_pos, mean_vel] # 初始化值
 
         w, h = get_size(det_meas)
         std = np.array([
@@ -82,7 +79,7 @@ class KalmanFilter:
             max(self.init_vel_weight * self.std_factor_det[0] * w, self.min_std_det[0]),
             max(self.init_vel_weight * self.std_factor_det[1] * h, self.min_std_det[1])
         ], dtype=np.float64)
-        covariance = np.diag(np.square(std))
+        covariance = np.diag(np.square(std)) # 初始化
         return mean, covariance
 
     def predict(self, mean, covariance):
@@ -180,11 +177,11 @@ class KalmanFilter:
         projected_mean, projected_cov = self.project(mean, covariance, MeasType.DETECTOR)
         return self._maha_distance(projected_mean, projected_cov, measurements)
 
-    @staticmethod
-    @nb.njit(fastmath=True, cache=True)
+    # @staticmethod
+    # @nb.njit(fastmath=True, cache=True)
     def warp(mean, covariance, H):
         """
-        Warps kalman filter state using a homography transformation.
+        使用单应变换来校正卡尔曼滤波状态量
         https://scholarsarchive.byu.edu/cgi/viewcontent.cgi?article=1301&context=studentpub
         ----------
         mean : ndarray
@@ -259,8 +256,8 @@ class KalmanFilter:
             motion_mat[i + 4, i + 4] = 0.5**(dt / self.vel_half_life)
         return acc_cov, meas_mat, motion_mat
 
-    @staticmethod
-    @nb.njit(fastmath=True, cache=True)
+    # @staticmethod
+    # @nb.njit(fastmath=True, cache=True)
     def _predict(mean, covariance, motion_mat, acc_cov, std_factor_acc, std_offset_acc):
         size = max(get_size(mean[:4])) # max(w, h)
         std = std_factor_acc * size + std_offset_acc
@@ -272,8 +269,8 @@ class KalmanFilter:
         covariance = 0.5 * (covariance + covariance.T)
         return mean, covariance
 
-    @staticmethod
-    @nb.njit(fastmath=True, cache=True)
+    # @staticmethod
+    # @nb.njit(fastmath=True, cache=True)
     def _project(mean, covariance, meas_mat, std_factor, min_std, multiplier):
         w, h = get_size(mean[:4])
         std = np.array([
@@ -289,8 +286,8 @@ class KalmanFilter:
         innovation_cov = covariance + meas_cov
         return mean, innovation_cov
 
-    @staticmethod
-    @nb.njit(fastmath=True, cache=True)
+    # @staticmethod
+    # @nb.njit(fastmath=True, cache=True)
     def _update(mean, covariance, proj_mean, proj_cov, measurement, meas_mat):
         kalman_gain = np.linalg.solve(proj_cov, (covariance @ meas_mat.T).T).T
         innovation = measurement - proj_mean
@@ -298,13 +295,17 @@ class KalmanFilter:
         covariance = covariance - kalman_gain @ proj_cov @ kalman_gain.T
         return mean, covariance
 
-    @staticmethod
-    @nb.njit(fastmath=True, cache=True)
+    # @staticmethod
+    # @nb.njit(fastmath=True, cache=True)
     def _maha_distance(mean, covariance, measurements):
         diff = measurements - mean
         L = np.linalg.cholesky(covariance)
         y = np.linalg.solve(L, diff.T)
         return np.sum(y**2, axis=0)
 
+
+
+if __name__ == "__main__":
+    pass
 
 
